@@ -1,4 +1,3 @@
-// ANCHOR: app
 use std::time::{Duration, Instant};
 
 use color_eyre::eyre::{eyre, Result};
