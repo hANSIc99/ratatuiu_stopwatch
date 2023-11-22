@@ -64,12 +64,12 @@ impl StopwatchApp {
 
   async fn run(&mut self) -> Result<()> {
     let mut tui = Tui::new()?;
-    tui.enter()?;
+    tui.enter()?; // >>> tui.start()
     while !self.state.is_quitting() {
       tui.draw(|f| self.ui(f).expect("Unexpected error during drawing"))?;
-      let event = tui.next().await.ok_or(eyre!("Unable to get event"))?; // blocks until next event
+      let event = tui.next().await.ok_or(eyre!("Unable to get event"))?; // blocks until next event (e.g. keystroke or tick)
       let message = self.handle_event(event)?;
-      self.update(message)?;
+      self.update(message)?; // Update App state
     }
     tui.exit()?;
     Ok(())
@@ -77,7 +77,7 @@ impl StopwatchApp {
 
   fn handle_event(&self, event: Event) -> Result<Message> {
     let msg = match event {
-      Event::Key(key) => {
+      Event::Key(key) => { // Key events
         match key.code {
           crossterm::event::KeyCode::Char('q') => Message::Quit,
           crossterm::event::KeyCode::Char(' ') => Message::StartOrSplit,
@@ -85,7 +85,7 @@ impl StopwatchApp {
           _ => Message::Tick,
         }
       },
-      _ => Message::Tick,
+      _ => Message::Tick, // All other events
     };
     Ok(msg)
   }
@@ -309,19 +309,19 @@ impl Tui {
     let _event_tx = self.event_tx.clone();
     self.task = tokio::spawn(async move {
       let mut reader = crossterm::event::EventStream::new();
-      let mut interval = tokio::time::interval(tick_rate);
+      let mut interval = tokio::time::interval(tick_rate); // Creates new Interval that yields with interval of duration. The first tick completes immediately.
       loop {
-        let delay = interval.tick();
+        let delay = interval.tick(); // The first tick completes immediately.
         let crossterm_event = reader.next().fuse();
-        tokio::select! {
-          _ = _cancellation_token.cancelled() => {
-            break;
+        tokio::select! { // Waits on multiple concurrent branches, returning when the first branch completes, cancelling the remaining branches.
+          _ = _cancellation_token.cancelled() => { // [1.] cancelled() == future, gets fullfilled when cancellation is requested
+            break; // break endless loop
           }
-          maybe_event = crossterm_event => {
+          maybe_event = crossterm_event => { // [2.] Keystroke
             match maybe_event {
               Some(Ok(crossterm::event::Event::Key(key))) => {
                 if key.kind == crossterm::event::KeyEventKind::Press {
-                    _event_tx.send(Event::Key(key)).unwrap();
+                    _event_tx.send(Event::Key(key)).unwrap(); // Send keystroke back to rx_stream (-> next() method)
                 }
               }
               Some(Ok(_)) => { }
@@ -331,7 +331,7 @@ impl Tui {
               None => {},
             }
           },
-          _ = delay => {
+          _ = delay => { // [3. tick passed]
               _event_tx.send(Event::Tick).unwrap();
           },
         }
